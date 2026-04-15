@@ -1,0 +1,130 @@
+﻿<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrueNAS Support Panel</title>
+    <!-- Load Tailwind CSS from CDN for utility-first styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Style for solved tickets: strike-through and lower opacity */
+        .solved { text-decoration: line-through; opacity: 0.6; }
+    </style>
+</head>
+<body class="bg-gray-100 p-5">
+
+    <!-- Main container for the support system interface -->
+    <div class="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-md">
+        <h1 class="text-2xl font-bold mb-6 text-blue-700">TrueNAS Support System</h1>
+
+        <!-- Ticket creation form section -->
+        <div class="mb-8 p-4 border border-blue-200 rounded bg-blue-50">
+            <h2 class="font-semibold mb-3">Registrer ny sak</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Subject input field -->
+                <input type="text" id="subject" placeholder="Emne (f.eks. Diskfeil)" class="p-2 border rounded">
+                <!-- Server name or IP input field -->
+                <input type="text" id="server" placeholder="Servernavn/IP" class="p-2 border rounded">
+                <!-- Description textarea spans the full width on medium screens -->
+                <textarea id="desc" placeholder="Beskrivelse av problemet" class="p-2 border rounded md:col-span-2"></textarea>
+                <!-- Button to add a new ticket -->
+                <button onclick="addTicket()" class="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition">Lagre sak</button>
+            </div>
+        </div>
+
+        <!-- Ticket list header and container -->
+        <h2 class="text-xl font-semibold mb-4">Aktive og løste saker</h2>
+        <div id="ticketList" class="space-y-4">
+            <!-- Initial loading message shown until Firestore loads tickets -->
+            <p class="text-gray-500">Laster saker...</p>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import Firebase modules required for app initialization and Firestore operations.
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, query, orderBy }
+        from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // Firebase application configuration object.
+        const firebaseConfig = {
+            apiKey: "AIzaSyA2x_y4hWl35VMRSOZEsOGMwORZy5iGzIM",
+            authDomain: "truenas-support.firebaseapp.com",
+            projectId: "truenas-support",
+            storageBucket: "truenas-support.firebasestorage.app",
+            messagingSenderId: "987682876925",
+            appId: "1:987682876925:web:7cd256f6c6e2dbfc35bd94"
+        };
+
+        // Initialize Firebase app and connect to Firestore database.
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const ticketsCol = collection(db, 'tickets');
+
+        // Function to add a new ticket document to Firestore.
+        window.addTicket = async () => {
+            const subject = document.getElementById('subject').value;
+            const server = document.getElementById('server').value;
+            const desc = document.getElementById('desc').value;
+
+            // Prevent ticket submission without a subject.
+            if (!subject) return alert("Vennligst fyll ut emne");
+
+            await addDoc(ticketsCol, {
+                subject,
+                server,
+                desc,
+                status: 'åpen',
+                createdAt: new Date()
+            });
+
+            // Clear the input fields after saving.
+            document.getElementById('subject').value = '';
+            document.getElementById('server').value = '';
+            document.getElementById('desc').value = '';
+        };
+
+        // Function to delete a ticket document by its Firestore document ID.
+        window.deleteTicket = async (id) => {
+            if (confirm("Vil du slette denne saken?")) {
+                await deleteDoc(doc(db, "tickets", id));
+            }
+        };
+
+        // Function to toggle the ticket status between open and solved.
+        window.toggleStatus = async (id, currentStatus) => {
+            const newStatus = currentStatus === 'åpen' ? 'løst' : 'åpen';
+            await updateDoc(doc(db, "tickets", id), { status: newStatus });
+        };
+
+        // Subscribe to realtime updates from the tickets collection, ordered by creation time.
+        const q = query(ticketsCol, orderBy("createdAt", "desc"));
+        onSnapshot(q, (snapshot) => {
+            const ticketList = document.getElementById('ticketList');
+            ticketList.innerHTML = '';
+
+            // Render each ticket document as an item in the list.
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                const id = doc.id;
+                const isSolved = data.status === 'løst';
+
+                ticketList.innerHTML += `
+                    <div class="p-4 border rounded-lg ${isSolved ? 'bg-gray-50' : 'bg-white border-l-4 border-l-blue-500'} flex justify-between items-center">
+                        <div class="${isSolved ? 'solved' : ''}">
+                            <h3 class="font-bold text-lg">${data.subject} <span class="text-sm font-normal text-gray-500">(${data.server})</span></h3>
+                            <p class="text-gray-600 text-sm">${data.desc}</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="toggleStatus('${id}', '${data.status}')" class="text-sm bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600">
+                                ${isSolved ? 'Gjenåpne' : 'Løs'}
+                            </button>
+                            <button onclick="deleteTicket('${id}')" class="text-sm bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">Slett</button>
+                        </div>
+                    </div>
+                `;
+            });
+        });
+    </script>
+</body>
+</html>
